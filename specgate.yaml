@@ -1,21 +1,40 @@
-project_name: "Spec-Gate-Demo"
-operation_mode: "spec-gate"
-
+project_name: Spec-Gate-Demo
+work_dir: D:\Downloads\testing
+knowledge_base: ./docs
+operation_mode: spec-gate
 agent_settings:
   planner:
-    provider: "ollama"
-    model: "qwen2.5-coder"
+    provider: openrouter
+    model: openrouter/free
     temperature: 0.1
     budget_limit_usd: 5.0
-
+    input_cost_per_million_tokens: 0.0
+    output_cost_per_million_tokens: 0.0
   executor:
-    provider: "ollama"
-    model: "qwen2.5-coder"
+    provider: openrouter
+    model: openrouter/free
     temperature: 0.3
     budget_limit_usd: 5.0
-
+    input_cost_per_million_tokens: 0.0
+    output_cost_per_million_tokens: 0.0
   reviewer:
-    provider: "ollama"
-    model: "qwen2.5-coder"
+    provider: openrouter
+    model: openrouter/free
     temperature: 0.0
     budget_limit_usd: 5.0
+    input_cost_per_million_tokens: 0.0
+    output_cost_per_million_tokens: 0.0
+dashboard:
+  agents:
+  - name: Planner
+    node: planner
+    role: planning
+  - name: Executor
+    node: executor
+    role: implementation
+  - name: Tester
+    node: tester
+    role: quality gate
+  - name: Librarian
+    node: librarian
+    role: summarization

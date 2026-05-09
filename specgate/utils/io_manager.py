@@ -13,6 +13,7 @@ class IOManager:
         self.specgate_dir = self.root / ".specgate"
         self.journal_path = self.specgate_dir / "JOURNAL.md"
         self.progress_path = self.specgate_dir / "PROGRESS.md"
+        self.summary_path = self.specgate_dir / "SUMMARY.md"
 
         self._initialize_files()
 
@@ -22,7 +23,7 @@ class IOManager:
         """
         self.specgate_dir.mkdir(parents = True, exist_ok = True)
 
-        for path in [self.spec_path, self.journal_path, self.progress_path]:
+        for path in [self.spec_path, self.journal_path, self.progress_path, self.summary_path]:
             if not path.exists():
                 path.touch()
 
@@ -110,11 +111,40 @@ class IOManager:
 
         self.progress_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    def reset_metrics(self) -> None:
+        """
+        Resets usage metrics while preserving task status.
+        """
+        self.sync_progress(self.parse_tasks_from_spec(), total_tokens=0, total_cost=0.0)
+
+    def reset_activity(self) -> None:
+        """
+        Clears dashboard activity history while preserving task status and metrics.
+        """
+        self.journal_path.write_text("", encoding="utf-8")
+        self.summary_path.write_text("", encoding="utf-8")
+
+    def append_activity(self, title: str, detail: str) -> None:
+        """
+        Appends a dashboard-friendly activity event to the journal.
+        """
+        current_title = ""
+        if self.journal_path.exists():
+            for line in reversed(self.journal_path.read_text(encoding="utf-8").splitlines()):
+                if line.startswith("## Task:"):
+                    current_title = line.replace("## Task:", "", 1).strip()
+                    break
+
+        with open(self.journal_path, "a", encoding="utf-8") as f:
+            if current_title != title:
+                f.write(f"\n## Task: {title}\n")
+            f.write(f"- {detail}\n")
+
     def snapshot_state(self, message: str) -> str:
         """
         Commits the durable markdown state when the project is inside a Git repo.
         """
-        tracked_paths = [self.spec_path, self.journal_path, self.progress_path]
+        tracked_paths = [self.spec_path, self.journal_path, self.progress_path, self.summary_path]
         existing_paths = [str(path.relative_to(self.root)) for path in tracked_paths if path.exists()]
 
         if not existing_paths:
@@ -157,4 +187,40 @@ class IOManager:
             return "Git snapshot skipped: nothing to commit."
 
         return f"Git snapshot failed: {output}"
+
+    def compact_journal(self, max_chars: int = 8000, tail_chars: int = 4000) -> bool:
+        """
+        Creates a rolling deterministic summary when JOURNAL.md grows too large.
+        """
+        if not self.journal_path.exists():
+            return False
+
+        journal = self.journal_path.read_text(encoding="utf-8")
+        if len(journal) <= max_chars:
+            return False
+
+        retained_tail = journal[-tail_chars:]
+        summary_entry = [
+            f"## Snapshot {datetime.now().isoformat(timespec='seconds')}",
+            "",
+            f"- Compacted journal length: {len(journal)} characters",
+            f"- Retained tail length: {len(retained_tail)} characters",
+            "",
+            "### Retained Tail",
+            "",
+            "```text",
+            retained_tail.strip(),
+            "```",
+            "",
+        ]
+
+        with open(self.summary_path, "a", encoding="utf-8") as f:
+            f.write("\n".join(summary_entry))
+
+        self.journal_path.write_text(
+            "# Journal\n\nPrevious entries were compacted into `.specgate/SUMMARY.md`.\n\n"
+            + retained_tail.lstrip(),
+            encoding="utf-8",
+        )
+        return True
 

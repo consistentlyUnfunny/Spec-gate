@@ -1,120 +1,429 @@
-# Project Spec-Gate Technical Documentation
+# Spec-Gate
 
-**Version:** `1.1.0-Alpha`
+Spec-Gate is a local AI orchestration harness for running implementation tasks from a durable project specification. It uses `SPEC.md` as the task source, LangGraph as the workflow engine, Markdown files for recoverable state, and a React/FastAPI dashboard for observing and controlling runs.
 
-**Role:** Durable AI Orchestration Harness
+The core idea is simple: write or generate a clear spec, let the agent work task-by-task, verify with tests, and keep all progress visible.
 
-**Architectural Pattern:** State-Machine Driven Durable Execution
+## What Spec-Gate Is For
 
----
+Spec-Gate is meant to make AI-assisted coding less fragile. Instead of giving an agent one large prompt and hoping it finishes correctly, you give it a durable spec made of small tasks. The system then executes those tasks through a controlled loop.
 
-## 1. System Overview
+It is useful when you want:
 
-**Project Spec-Gate** is a production-grade backend framework designed to host autonomous AI agents. It prioritizes reliability, observability, and cost-efficiency by treating agentic workflows as a series of versioned, human-approved state transitions.
+- A visible plan before implementation.
+- Task-by-task execution instead of one giant autonomous run.
+- Test-gated progress.
+- A recoverable audit trail.
+- Local model support through Ollama.
+- A dashboard that shows what the agent is doing.
+- A safer output boundary through `work_dir`.
 
-Unlike generic autonomous agents, Spec-Gate utilizes a **Durable Execution** model. Progress is persisted in human-readable Markdown files, allowing for seamless recovery from crashes, token limits, or logic errors.
+Spec-Gate is not trying to replace an engineer. It is closer to a disciplined project harness around AI coding: the human owns the intent and review, while the agent handles bounded implementation attempts.
 
----
+## Why It Exists
 
-## 2. Core Architectural Pillars
+AI coding agents can drift, loop, forget context, or mark work as done when nothing useful happened. Spec-Gate exists to reduce those failure modes.
 
-### A. The "Memory Palace" (State Management)
+The design goals are:
 
-State is not stored in a black-box database; it is managed via Git-versioned Markdown files at the root of the project directory to ensure transparency and version control:
+- **Durability:** progress survives crashes, restarts, and long runs.
+- **Transparency:** state is stored in files you can read.
+- **Control:** tasks come from `SPEC.md`, not hidden state.
+- **Verification:** tests gate completion in `spec-gate` mode.
+- **Observability:** the dashboard shows progress, usage, activity, and agents.
+- **Containment:** file writes are restricted to a configured working directory.
 
-- **`SPEC.md`**: The technical blueprint and project constraints.
-- **`JOURNAL.md`**: A chronological record of agent reasoning and tool usage.
-- **`PROGRESS.md`**: A task-based checklist featuring real-time token and cost metadata.
+## How Spec-Gate Works
 
-### B. Durable Orchestration (LangGraph)
+Spec-Gate reads tasks from `SPEC.md`. A task must use this checkbox format:
 
-The "brain" of the system is a cyclic state machine built on **LangGraph**.
+```md
+- [ ] Task name: Task description.
+```
 
-- **Checkpoints:** Every state change is saved to a persistent store (SQLite/Postgres).
-- **Interrupts:** Native support for "Human-in-the-Loop" (HITL) approval nodes.
-- **Cycles:** Deterministic retry logic for self-healing when agents fail QA tests.
+When the task is completed, Spec-Gate marks it as:
 
-### C. Agentic TDD (Quality Assurance Gate)
+```md
+- [x] Task name: Task description.
+```
 
-Spec-Gate enforces a **"Trust but Verify"** model:
+The orchestrator flow is:
 
-- **Test-Driven Development:** The orchestrator prevents the agent from moving to "Task N+1" until "Task N" passes all associated unit tests.
-- **Exit-Code Gating:** Implementation nodes are physically disconnected from the "Completion" node unless the test runner (e.g., `pytest`, `vitest`) returns `0`.
+1. **Planner** reads `SPEC.md` and finds the next unchecked task.
+2. **Executor** asks the configured model to make file changes with tools.
+3. **Tester** runs the configured test command, usually `pytest`.
+4. If tests pass, the task is checked off.
+5. If tests fail, Spec-Gate retries until `max_retries` is reached.
+6. The dashboard shows tasks, cost, token usage, agent status, and activity.
 
----
+## Memory Technique
 
-## 3. Module Specifications
+Spec-Gate uses a “Memory Palace” style of state management. The idea is that important memory should live in named places that are easy for humans and agents to revisit.
 
-### Module 1: The Governance Engine (`specgate.yaml`)
+There are three layers:
 
-A configuration-first approach to project management.
+- **Project memory:** durable Markdown files such as `SPEC.md`, `.specgate/JOURNAL.md`, `.specgate/PROGRESS.md`, and `.specgate/SUMMARY.md`.
+- **Spatial memory:** execution memories are grouped by domain and task, using a structure like `wing -> room -> context`. For example, the `core` wing can contain a room for a task, and that room can store verified successes or pitfalls.
+- **Linked context:** `SPEC.md` can contain `[[WikiLinks]]`, and Spec-Gate loads only those linked Markdown files from `knowledge_base`.
 
-YAML
+This gives the agent a small, relevant context window instead of dumping every document into every prompt. It also gives the human readable recovery points when something goes wrong.
 
-`# Example specgate.yaml
-project_name: "FinanceTrackerPro"
-work_dir: "./src"
-knowledge_base: "./docs/obsidian_vault"
-budget_limit_usd: 5.00
-operation_mode: "spec-gate" # Options: spec-gate, rapid, vibe
+In practice:
+
+- `SPEC.md` is the blueprint.
+- `PROGRESS.md` is the task and usage dashboard source.
+- `JOURNAL.md` is the run log.
+- `SUMMARY.md` keeps compacted history when the journal grows.
+- Linked docs in `knowledge_base` provide just-in-time background context.
+
+## Recommended Workflow
+
+You can write `SPEC.md` by hand, but the best workflow is to ask an AI to draft it for you.
+
+Example prompt to use in ChatGPT or another planning model:
+
+```text
+Write a SPEC.md for this project using Spec-Gate task format.
+
+Requirements:
+- Use Markdown.
+- Include a short Goal section.
+- Include a Tasks section.
+- Every task must use this exact format:
+  - [ ] Task name: Task description.
+- Keep each task small enough to implement and test independently.
+
+Project idea:
+<describe what you want built>
+```
+
+Then paste the generated Markdown into `SPEC.md`, review it, save it, and run Spec-Gate from the dashboard.
+
+## Quick Start
+
+Install dependencies:
+
+```powershell
+uv sync
+cd frontend
+npm.cmd install
+npm.cmd run build
+cd ..
+```
+
+Start the dashboard and API:
+
+```powershell
+uv run specgate-dashboard
+```
+
+Open:
+
+```text
+http://127.0.0.1:8765/
+```
+
+Edit `SPEC.md`, save it, then click **Run** in the dashboard.
+
+## Running With Ollama
+
+Start Ollama:
+
+```powershell
+ollama serve
+```
+
+Pull a coding model:
+
+```powershell
+ollama pull qwen2.5-coder
+```
+
+Set `.env`:
+
+```env
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_API_KEY=ollama
+```
+
+Configure `specgate.yaml`:
+
+```yaml
+project_name: "Spec-Gate-Demo"
+work_dir: "./workspace"
+knowledge_base: "./docs"
+operation_mode: "spec-gate"
 
 agent_settings:
-  model: "claude-3-5-sonnet"
-  max_retries: 3
+  executor:
+    provider: "ollama"
+    model: "qwen2.5-coder"
+    temperature: 0.3
+    max_retries: 3
+    budget_limit_usd: 5.0
 
 qa_settings:
   test_runner: "pytest"
-  coverage_threshold: 80`
+  coverage_threshold: 80
 
-### Module 2: The Observability Dashboard
+dashboard:
+  agents:
+    - name: Planner
+      node: planner
+      role: planning
+    - name: Executor
+      node: executor
+      role: implementation
+    - name: Tester
+      node: tester
+      role: quality gate
+```
 
-A local web interface designed to demystify agent autonomy.
+Local Ollama models vary in tool-calling quality. If a model does not create files, check the Activity panel. Spec-Gate will no longer mark a task complete when no successful tool calls happened.
 
-- **Live Graph Visualizer:** Real-time tracking of the active node in the LangGraph.
-- **The "Gas Gauge":** Real-time estimation of USD spend per feature/task.
-- **Graduated Trust Toggle:** A 3-way switch to toggle between **Spec-Gate** (High Rigor), **Rapid** (Auto-Approve), and **Vibe** (Direct Execution).
+## Using OpenAI Or Another OpenAI-Compatible API
 
-### Module 3: Linked Context Engine (JIT Knowledge)
+Change credentials in `.env`:
 
-Inspired by Obsidian-style bidirectional linking to manage context windows efficiently:
+```env
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=your-api-key
+```
 
-- **Bidirectional Parsing:** The orchestrator scans `SPEC.md` for `[[WikiLinks]]`.
-- **Just-in-Time (JIT) Loading:** Only the linked markdown files are injected into the agent's context, preventing "Context Bloat" and reducing costs.
+Change the executor provider and model in `specgate.yaml`:
 
----
+```yaml
+agent_settings:
+  executor:
+    provider: "openai"
+    model: "gpt-4.1-mini"
+    temperature: 0.2
+    max_retries: 3
+    budget_limit_usd: 5.0
+    input_cost_per_million_tokens: 0.40
+    output_cost_per_million_tokens: 1.60
+```
 
-## 4. Operational Workflow & Graduated Trust
+The config loader maps credentials by provider name:
 
-Spec-Gate adapts its workflow based on the selected `operation_mode` to balance safety and velocity.
+```text
+provider: "openai" -> OPENAI_BASE_URL and OPENAI_API_KEY
+provider: "ollama" -> OLLAMA_BASE_URL and OLLAMA_API_KEY
+```
 
-1. **Initialize:** Load `specgate.yaml` and set up file system watchers.
-2. **Plan:** Agent drafts `SPEC.md` based on the initial user prompt.
-3. **Approve:**
-    - *Spec-Gate Mode:* Orchestrator enters `WAIT` state for human signature.
-    - *Rapid Mode:* Agent auto-approves if the plan aligns with high-level goals.
-4. **Execute:**
-    - Agent creates unit tests and writes implementation.
-    - *Spec-Gate Mode:* Tests **must** return exit `0` to progress.
-    - *Rapid Mode:* Tests are run, but failures generate a warning instead of a "Hard Halt."
-    - *Vibe Mode:* Skips test generation/execution entirely for maximum speed.
-5. **Summarize:** Every 2,000 tokens, the "Librarian" node compresses `JOURNAL.md` into a snapshot.
-6. **Deliver:** Final project summary and code delivery.
+## Where To Configure Things
 
----
+Use `specgate.yaml` for project behavior:
 
-## 5. Value Proposition
+```yaml
+project_name: "My Project"
+work_dir: "./workspace"
+knowledge_base: "./docs"
+operation_mode: "spec-gate"
 
-- **Insurance against "Infinite Loops":** Hard-coded budget caps save hundreds in API costs.
-- **Recovery from "Agent Drift":** Resumable state means 4-hour tasks don't need to be restarted from scratch.
-- **Senior-Level Engineering:** Provides an audit trail and QA rigor that "Vibe Coding" cannot replicate.
+agent_settings:
+  executor:
+    provider: "ollama"
+    model: "qwen2.5-coder"
+    temperature: 0.3
+    max_retries: 3
+    budget_limit_usd: 5.0
 
----
+qa_settings:
+  test_runner: "pytest"
+  coverage_threshold: 80
 
-## 6. Project Roadmap
+dashboard:
+  agents:
+    - name: Planner
+      node: planner
+      role: planning
+    - name: Executor
+      node: executor
+      role: implementation
+    - name: Tester
+      node: tester
+      role: quality gate
+    - name: Librarian
+      node: librarian
+      role: summarization
+```
 
-| **Phase** | **Focus** | **Key Deliverables** |
-| --- | --- | --- |
-| **Phase 1** | **Core** | LangGraph state machine, Markdown sync, Git versioning. |
-| **Phase 2** | **Governance** | `specgate.yaml` engine and HITL approval gates. |
-| **Phase 3** | **Optimization** | JIT Knowledge Engine, Recursive Summarization, Rapid Mode. |
-| **Phase 4** | **Observability** | Metrics Dashboard and UI Polish. |
+Use `.env` for secrets:
+
+```env
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_API_KEY=ollama
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=your-api-key
+```
+
+Do not commit `.env`.
+
+## Working Directory
+
+`work_dir` controls where the AI is allowed to create and modify files.
+
+Example:
+
+```yaml
+work_dir: "./workspace"
+```
+
+The dashboard also has a Working Directory control. Click **Browse** to choose a folder using your local file explorer. The selected folder is saved back into `specgate.yaml`.
+
+The file tools are restricted to this directory, so paths like `../outside.py` are rejected.
+
+## Dashboard Controls
+
+The dashboard runs at:
+
+```text
+http://127.0.0.1:8765/
+```
+
+Controls:
+
+- **Run** starts or resumes the orchestration loop.
+- **Stop** requests the runner to stop after the current graph step finishes.
+- **Reset** clears token and cost metrics while preserving task status.
+- **Browse** opens a native folder picker for `work_dir`.
+- **Save** saves a typed working directory path.
+- **Help** opens this README inside the dashboard.
+- The moon/sun button toggles dark mode.
+
+The dashboard auto-refreshes, so there is no manual refresh button.
+
+Action results appear as dismissible snackbar messages in the lower-right corner.
+
+## Agent Display Configuration
+
+The Agents panel is driven by `specgate.yaml`, not hardcoded in the frontend. This lets you change the graph shape without rewriting the dashboard.
+
+Default example:
+
+```yaml
+dashboard:
+  agents:
+    - name: Planner
+      node: planner
+      role: planning
+    - name: Executor
+      node: executor
+      role: implementation
+    - name: Tester
+      node: tester
+      role: quality gate
+    - name: Librarian
+      node: librarian
+      role: summarization
+```
+
+The `node` value must match the LangGraph node name. When LangGraph reports that node as the current `next_node`, the dashboard highlights that agent card.
+
+If you later change the graph to a different team, update the config:
+
+```yaml
+dashboard:
+  agents:
+    - name: Researcher
+      node: research
+      role: context gathering
+    - name: Architect
+      node: architect
+      role: system design
+    - name: Coder
+      node: coder
+      role: implementation
+    - name: Reviewer
+      node: reviewer
+      role: code review
+    - name: Tester
+      node: tester
+      role: quality gate
+```
+
+The dashboard will render those agents automatically.
+
+## Durable State Files
+
+Spec-Gate writes recoverable state into `.specgate/`:
+
+```text
+.specgate/JOURNAL.md
+.specgate/PROGRESS.md
+.specgate/SUMMARY.md
+.specgate/checkpoint.db
+```
+
+`PROGRESS.md` stores task progress and usage totals. `JOURNAL.md` stores execution activity. `SUMMARY.md` stores compacted journal snapshots.
+
+## JIT Knowledge With WikiLinks
+
+You can link supporting docs from `SPEC.md`:
+
+```md
+Use [[Architecture Notes]] and [[API Contracts]].
+```
+
+If `knowledge_base` is `./docs`, Spec-Gate will try to load:
+
+```text
+docs/Architecture Notes.md
+docs/API Contracts.md
+```
+
+Only linked Markdown files are injected into the executor context.
+
+## Test Task
+
+Paste this into `SPEC.md` to test the loop:
+
+```md
+# Project Specification
+
+## Goal
+
+Test that Spec-Gate can create a tiny Python feature and verify it with pytest.
+
+## Tasks
+
+- [ ] Create greeting utility: Inside the configured working directory, create `specgate_demo.py` with a function `build_greeting(name: str) -> str` that returns `Hello, {name}!`. Also create `test_specgate_demo.py` with a pytest test that verifies `build_greeting("Ada")` returns `Hello, Ada!`.
+```
+
+Expected files appear inside the configured `work_dir`.
+
+## Development Commands
+
+Run backend and built React app:
+
+```powershell
+uv run specgate-dashboard
+```
+
+Develop the React frontend with hot reload:
+
+```powershell
+uv run specgate-dashboard
+cd frontend
+npm.cmd run dev
+```
+
+Run tests:
+
+```powershell
+uv run pytest
+```
+
+Build frontend:
+
+```powershell
+cd frontend
+npm.cmd run build
+```
+
+## Current Limitations
+
+- Stop is cooperative. It stops between graph steps but cannot instantly kill an in-flight model call.
+- Local models may not reliably support tool calling.
+- The browser cannot safely expose arbitrary filesystem paths by itself, so folder selection is handled by the local FastAPI backend.
