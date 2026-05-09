@@ -2,9 +2,26 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from pathlib import Path
 
+WORKSPACE_ROOT = Path(".").resolve()
+
+
+def configure_workspace(root: str) -> None:
+    global WORKSPACE_ROOT
+    WORKSPACE_ROOT = Path(root).resolve()
+    WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+
+
+def resolve_workspace_path(filepath: str) -> Path:
+    target_file = (WORKSPACE_ROOT / filepath).resolve()
+    try:
+        target_file.relative_to(WORKSPACE_ROOT)
+    except ValueError as exc:
+        raise ValueError(f"Path {filepath} escapes configured work_dir.") from exc
+    return target_file
+
 
 class ReplaceBlockArgs(BaseModel):
-    filepath: str = Field(..., description = "Path to the file to modify, relative to project root.")
+    filepath: str = Field(..., description = "Path to the file to modify, relative to the configured work_dir.")
     search_block: str = Field(..., description="The exact existing lines of code to be replaced. Must match character-for-character.")
     replace_block: str = Field(..., description="The new lines of code to insert in place of the search_block.")
 
@@ -15,10 +32,13 @@ def replace_content_block(filepath: str, search_block: str, replace_block: str) 
     WriteTool and ModifyTool can waste token by overriding the whole file
     """
 
-    target_file = Path(filepath)
+    try:
+        target_file = resolve_workspace_path(filepath)
+    except ValueError as exc:
+        return f"Error: {exc}"
 
     if not target_file.exists():
-        return f"Error: File {filepath} does not exist. Use create_file tool to create a file first"
+        return f"Error: File {filepath} does not exist inside {WORKSPACE_ROOT}. Use create_file tool to create a file first"
 
     content = target_file.read_text(encoding = "utf-8")
 
@@ -36,7 +56,11 @@ def create_file(filepath: str, initial_content: str) -> str:
     """
     Create a new file with initial content
     """
-    target_file = Path(filepath)
+    try:
+        target_file = resolve_workspace_path(filepath)
+    except ValueError as exc:
+        return f"Error: {exc}"
+
     if target_file.exists():
         return f"Error: File {filepath} already exists. Use replace_content_block to modify it."
     

@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from specgate.graph import graph
+from specgate.runtime import THREAD_CONFIG, create_initial_state
 from specgate.state import SpecGateState
 
 def print_header():
@@ -52,46 +53,27 @@ def handle_interruption(state: SpecGateState) -> bool:
 def main():
     print_header()
 
-    initial_state = SpecGateState(
-        project_root=".",
-        spec_path="SPEC.md",
-        tasks=[],
-        current_task_id=-1,
-        last_spec_hash="",
-        journal_tail="",
-        last_test_output="",
-        exit_code=0,
-        retry_counts={},
-        active_context=[],
-        total_tokens=0,
-        total_cost=0.0,
-        is_approved=False
-    )
-
-    # a static thread_id for SQLite checkpointer so it remembers the state across reboots.
-    config = {"configurable": {"thread_id": "project-specgate-dev"}}
-
     # check if we're continuing from a previous interruption
-    current_state_snapshot = graph.get_state(config)
+    current_state_snapshot = graph.get_state(THREAD_CONFIG)
 
     # not starting from snapshot
     if not current_state_snapshot.next:
         print("\nStarting new orchestration loop...")
         try:
-            for event in graph.stream(initial_state, config):
+            for event in graph.stream(create_initial_state(), THREAD_CONFIG):
                 for node_name, state_update in event.items():
-                    # no printing here because the nods have logging already
+                    # no printing here because the nodes have logging already
                     pass
         except Exception as e:
             print(f"\nFatal Error during Execution: {e}")
             sys.exit(1)
 
     while True:
-        state_snapshot = graph.get_state(config)
+        state_snapshot = graph.get_state(THREAD_CONFIG)
         
         # If there's no next node, the graph reached the END node.
         if not state_snapshot.next:
-            print("\n🎉 Spec-Gate execution completed successfully.")
+            print("\nSpec-Gate execution completed successfully.")
             break
             
         next_node = state_snapshot.next[0]
@@ -101,14 +83,14 @@ def main():
             approved = handle_interruption(state_snapshot.values)
             
             if approved:
-                print("\n⚙️ Resuming execution...")
-                for event in graph.stream(None, config):
+                print("\nResuming execution...")
+                for event in graph.stream(None, THREAD_CONFIG):
                     pass 
             else:
                 print("Exiting interactive loop.")
                 break
         else:
-             for event in graph.stream(None, config):
+             for event in graph.stream(None, THREAD_CONFIG):
                  pass
 
 

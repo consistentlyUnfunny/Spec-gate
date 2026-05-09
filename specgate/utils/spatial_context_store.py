@@ -1,5 +1,4 @@
 from typing import Any
-from langchain_core.stores import BaseStore
 
 class SpatialContextStore:
     """
@@ -7,7 +6,7 @@ class SpatialContextStore:
     Wing (Domain) > Room (feature) > Locus (Specifc Context)
     """
 
-    def __init__(self, store:BaseStore):
+    def __init__(self, store: Any):
         self.store = store
 
     def record_success(self, wing: str, room: str, key: str, data: dict[str, Any]):
@@ -32,8 +31,8 @@ class SpatialContextStore:
         """
         Retrieves verified paths and pitfalls
         """
-        verified = self.store.list(("loci", wing, room, "verified"))
-        pitfalls = self.store.list(("loci", wing, room, "pitfalls"))
+        verified = self.store.search(("loci", wing, room, "verified"))
+        pitfalls = self.store.search(("loci", wing, room, "pitfalls"))
 
         return {
             "verified": [item.value for item in verified],

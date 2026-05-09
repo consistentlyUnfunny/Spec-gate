@@ -12,6 +12,7 @@ def state(exit_code=0, retry_counts=None, current_task_id=1):
         "journal_tail": "",
         "last_test_output": "",
         "exit_code": exit_code,
+        "last_execution_ok": True,
         "retry_counts": retry_counts or {},
         "active_context": [],
         "total_tokens": 0,

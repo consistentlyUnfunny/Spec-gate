@@ -35,6 +35,7 @@ class SpecGateState(TypedDict):
     journal_tail: str  
     last_test_output: str
     exit_code: int
+    last_execution_ok: bool
     retry_counts: dict[int, int]
     active_context: list[str]
     # cost compute

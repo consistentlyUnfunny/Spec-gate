@@ -11,3 +11,7 @@ wheels/
 
 # markdown files that will polute git history
 .specgate
+
+# Frontend-generated files
+frontend/node_modules/
+frontend/dist/
