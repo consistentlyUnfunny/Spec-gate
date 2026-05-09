@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from .state import OperationalMode
 from .utils.config_loader import Config, load_config
 from .utils.io_manager import IOManager
 
@@ -165,17 +166,37 @@ class ObservabilityService:
         if not clean_work_dir:
             raise ValueError("work_dir cannot be empty.")
 
+        data = self._config_data()
+        data["work_dir"] = clean_work_dir
+        self._write_config(data)
+        (self.project_root / self.config.work_dir).mkdir(parents=True, exist_ok=True)
+
+        return self.config_snapshot()
+
+    def update_operation_mode(self, operation_mode: str) -> dict[str, Any]:
+        try:
+            mode = OperationalMode(operation_mode)
+        except ValueError as exc:
+            valid = ", ".join(mode.value for mode in OperationalMode)
+            raise ValueError(f"operation_mode must be one of: {valid}") from exc
+
+        data = self._config_data()
+        data["operation_mode"] = mode.value
+        self._write_config(data)
+
+        return self.config_snapshot()
+
+    def _config_data(self) -> dict[str, Any]:
         config_path = self.project_root / "specgate.yaml"
         data: dict[str, Any] = {}
         if config_path.exists():
             data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        return data
 
-        data["work_dir"] = clean_work_dir
+    def _write_config(self, data: dict[str, Any]) -> None:
+        config_path = self.project_root / "specgate.yaml"
         config_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
         self.config = load_config(str(self.project_root))
-        (self.project_root / self.config.work_dir).mkdir(parents=True, exist_ok=True)
-
-        return self.config_snapshot()
 
     def reset_metrics(self) -> dict[str, Any]:
         self.io.reset_metrics()

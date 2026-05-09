@@ -101,6 +101,26 @@ def test_update_work_dir_persists_to_yaml(tmp_path):
     assert (tmp_path / "generated").exists()
 
 
+def test_update_operation_mode_persists_to_yaml(tmp_path):
+    service = ObservabilityService(str(tmp_path))
+
+    snapshot = service.update_operation_mode("rapid")
+
+    assert snapshot["operation_mode"] == "rapid"
+    assert "operation_mode: rapid" in (tmp_path / "specgate.yaml").read_text(encoding="utf-8")
+
+
+def test_update_operation_mode_rejects_invalid_mode(tmp_path):
+    service = ObservabilityService(str(tmp_path))
+
+    try:
+        service.update_operation_mode("chaos")
+    except ValueError as exc:
+        assert "operation_mode must be one of" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
 def test_select_work_dir_persists_selected_path(monkeypatch, tmp_path):
     selected = tmp_path / "chosen"
     service = ObservabilityService(str(tmp_path))

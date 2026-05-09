@@ -50,7 +50,10 @@ def route_after_executor(state: SpecGateState) -> str:
 
 
 def route_after_tester(state: SpecGateState) -> str:
-    if state["exit_code"] == 0 or cfg.operation_mode == OperationalMode.RAPID:
+    if state["exit_code"] == 0:
+        return "planner"
+
+    if cfg.operation_mode == OperationalMode.RAPID and state.get("last_execution_ok", False):
         return "planner"
 
     task_id = state["current_task_id"]
@@ -262,6 +265,7 @@ def tester_node(state: SpecGateState):
             f.write(f"- EXECUTION FAILED: {test_output}\n")
         return {
             "exit_code": 1,
+            "last_execution_ok": False,
             "last_test_output": test_output,
             "retry_counts": retry_counts,
         }
@@ -270,7 +274,12 @@ def tester_node(state: SpecGateState):
         test_cmd = active_task.test_cmd or cfg.qa_settings.test_runner
         print(f"Running tests: {test_cmd}")
         io.append_activity(active_task.name, f"Running tests: `{test_cmd}`.")
-        result = subprocess.run(shlex.split(test_cmd), capture_output=True, text=True)
+        result = subprocess.run(
+            shlex.split(test_cmd),
+            cwd=cfg.work_dir,
+            capture_output=True,
+            text=True,
+        )
         exit_code = result.returncode
         test_output = (result.stdout + "\n" + result.stderr).strip()
         
@@ -290,6 +299,7 @@ def tester_node(state: SpecGateState):
         else:
             if cfg.operation_mode == OperationalMode.RAPID:
                 print("Tests failed, but Rapid mode allows progress with a warning.")
+                io.append_activity(active_task.name, "Tests failed, but rapid mode marked the task complete.")
                 io.mark_task_completed(active_task.id)
                 print(io.snapshot_state(f"Spec-Gate state: rapid-completed {active_task.name}"))
             else:
@@ -333,6 +343,7 @@ def tester_node(state: SpecGateState):
 
     return {
         "exit_code": exit_code,
+        "last_execution_ok": state.get("last_execution_ok", False),
         "last_test_output": locals().get("test_output", ""),
         "retry_counts": retry_counts,
     }

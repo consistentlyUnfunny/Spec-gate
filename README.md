@@ -56,6 +56,16 @@ The orchestrator flow is:
 5. If tests fail, Spec-Gate retries until `max_retries` is reached.
 6. The dashboard shows tasks, cost, token usage, agent status, and activity.
 
+## Operation Modes
+
+`operation_mode` controls how strict the loop is after the executor edits files.
+
+- `spec-gate`: Requires successful tool calls and passing tests before a task is marked complete. Failed tests retry until `max_retries`.
+- `rapid`: Requires successful tool calls, runs tests, but marks the task complete even if tests fail. If the executor did not make any successful tool calls, it retries instead of silently advancing.
+- `vibe`: Requires successful tool calls, then marks the task complete without running tests.
+
+Tests run from the configured `work_dir`, so generated workspace files are the files being verified.
+
 ## Memory Technique
 
 Spec-Gate uses a “Memory Palace” style of state management. The idea is that important memory should live in named places that are easy for humans and agents to revisit.

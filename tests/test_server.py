@@ -64,6 +64,25 @@ def test_workdir_endpoint_updates_config(tmp_path):
     assert response.json()["work_dir"] == "./generated"
 
 
+def test_operation_mode_endpoint_updates_config(tmp_path):
+    app = create_app(project_root=str(tmp_path))
+    client = TestClient(app)
+
+    response = client.post("/api/operation-mode", json={"operation_mode": "vibe"})
+
+    assert response.status_code == 200
+    assert response.json()["operation_mode"] == "vibe"
+
+
+def test_operation_mode_endpoint_rejects_invalid_mode(tmp_path):
+    app = create_app(project_root=str(tmp_path))
+    client = TestClient(app)
+
+    response = client.post("/api/operation-mode", json={"operation_mode": "chaos"})
+
+    assert response.status_code == 400
+
+
 def test_agents_endpoint_returns_agent_cards(tmp_path):
     app = create_app(project_root=str(tmp_path))
     client = TestClient(app)

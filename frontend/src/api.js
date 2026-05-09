@@ -61,6 +61,10 @@ export function updateWorkDir(workDir) {
   return postJsonBody("/api/workdir", { work_dir: workDir });
 }
 
+export function updateOperationMode(operationMode) {
+  return postJsonBody("/api/operation-mode", { operation_mode: operationMode });
+}
+
 export function resetMetrics() {
   return postJson("/api/reset-metrics");
 }

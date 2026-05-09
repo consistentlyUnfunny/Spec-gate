@@ -1,8 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { Activity, ArrowLeft, BookOpen, Bot, Check, CheckCircle2, CircleDollarSign, ExternalLink, FileText, FolderCog, FolderOpen, LoaderCircle, Moon, Play, RotateCcw, ScrollText, Square, Sun, X } from "lucide-react";
+import { Activity, ArrowLeft, BookOpen, Bot, Check, CheckCircle2, ChevronDown, CircleDollarSign, ExternalLink, FileText, FolderCog, FolderOpen, LoaderCircle, Moon, Play, RotateCcw, ScrollText, Square, Sun, X } from "lucide-react";
 
-import { loadDashboardData, openWorkDir, openWorkspacePath, resetActivity, resetMetrics, selectWorkDir, startOrchestrator, stopOrchestrator, updateWorkDir } from "./api";
+import { loadDashboardData, openWorkDir, openWorkspacePath, resetActivity, resetMetrics, selectWorkDir, startOrchestrator, stopOrchestrator, updateOperationMode, updateWorkDir } from "./api";
 import "./styles.css";
 
 function App() {
@@ -10,6 +10,8 @@ function App() {
   const [toast, setToast] = React.useState(null);
   const [updatedAt, setUpdatedAt] = React.useState("");
   const [workDirDraft, setWorkDirDraft] = React.useState("");
+  const [modeDraft, setModeDraft] = React.useState("spec-gate");
+  const [modeMenuOpen, setModeMenuOpen] = React.useState(false);
   const [view, setView] = React.useState("dashboard");
   const [theme, setTheme] = React.useState(() => {
     const stored = window.localStorage.getItem("specgate-theme");
@@ -46,6 +48,12 @@ function App() {
       setWorkDirDraft(data.config.work_dir);
     }
   }, [data?.config?.work_dir]);
+
+  React.useEffect(() => {
+    if (data?.config?.operation_mode) {
+      setModeDraft(data.config.operation_mode);
+    }
+  }, [data?.config?.operation_mode]);
 
   const toggleTheme = () => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
@@ -112,6 +120,18 @@ function App() {
       await refresh();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Unable to update working directory", "error");
+    }
+  };
+
+  const saveOperationMode = async (nextMode) => {
+    setModeDraft(nextMode);
+    setModeMenuOpen(false);
+    try {
+      await updateOperationMode(nextMode);
+      showToast(`Operation mode set to ${modeLabel(nextMode)}.`);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Unable to update operation mode", "error");
     }
   };
 
@@ -235,10 +255,17 @@ function App() {
 
           <section className="controlPanel panel">
             <div>
-              <h2><FolderCog size={17} /> Working Directory</h2>
-              <p className="helper">AI-created files are restricted to this folder. Current mode: {status.operation_mode ?? "unknown"}.</p>
+              <h2><FolderCog size={17} /> Run Settings</h2>
+              <p className="helper">AI-created files are restricted to this folder. Mode controls how tests gate completion.</p>
             </div>
             <form className="workdirForm" onSubmit={saveWorkDir}>
+              <ModePicker
+                value={modeDraft}
+                open={modeMenuOpen}
+                disabled={isRunning}
+                onToggle={() => setModeMenuOpen((current) => !current)}
+                onChange={saveOperationMode}
+              />
               <input value={workDirDraft} onChange={(event) => setWorkDirDraft(event.target.value)} aria-label="AI working directory" />
               <button className="resetButton" type="button" onClick={openCurrentWorkDir}>
                 <ExternalLink size={16} />
@@ -345,6 +372,52 @@ function TaskList({ tasks }) {
           <span className="tag">{task.status}</span>
         </article>
       ))}
+    </div>
+  );
+}
+
+function ModePicker({ value, open, disabled, onToggle, onChange }) {
+  const selected = MODE_OPTIONS.find((mode) => mode.value === value) ?? MODE_OPTIONS[0];
+
+  return (
+    <div className="modePicker">
+      <span className="modeLabel">Mode</span>
+      <button
+        className="modeTrigger"
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        title={selected.description}
+      >
+        <span>
+          <strong>{selected.label}</strong>
+          <small>{selected.short}</small>
+        </span>
+        <ChevronDown size={15} />
+      </button>
+      {open && !disabled ? (
+        <div className="modeMenu" role="listbox">
+          {MODE_OPTIONS.map((mode) => (
+            <button
+              className={mode.value === value ? "selected" : ""}
+              type="button"
+              role="option"
+              aria-selected={mode.value === value}
+              onClick={() => onChange(mode.value)}
+              title={mode.description}
+              key={mode.value}
+            >
+              <span>
+                <strong>{mode.label}</strong>
+                <small>{mode.description}</small>
+              </span>
+              {mode.value === value ? <Check size={14} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -588,5 +661,36 @@ function runtimeHint(status, nextNode) {
   }
   return nextNode ? `Checkpoint is waiting at ${nextNode}. Click Run to continue.` : "Click Run to start or resume the workflow.";
 }
+
+function modeLabel(mode) {
+  if (mode === "rapid") {
+    return "Rapid";
+  }
+  if (mode === "vibe") {
+    return "Vibe";
+  }
+  return "Spec-gate";
+}
+
+const MODE_OPTIONS = [
+  {
+    value: "spec-gate",
+    label: "Spec-gate",
+    short: "Strict",
+    description: "Requires successful tool calls and passing tests before completing a task.",
+  },
+  {
+    value: "rapid",
+    label: "Rapid",
+    short: "Test, then move",
+    description: "Requires successful tool calls, runs tests, and still completes if tests fail.",
+  },
+  {
+    value: "vibe",
+    label: "Vibe",
+    short: "No tests",
+    description: "Requires successful tool calls, then completes the task without running tests.",
+  },
+];
 
 createRoot(document.getElementById("root")).render(<App />);

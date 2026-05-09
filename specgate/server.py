@@ -85,6 +85,13 @@ def create_app(project_root: str = ".", graph: Any | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/operation-mode")
+    def update_operation_mode(payload: dict[str, str] = Body(...)) -> dict[str, Any]:
+        try:
+            return service.update_operation_mode(payload.get("operation_mode", ""))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/api/reset-metrics")
     def reset_metrics() -> dict[str, Any]:
         return service.reset_metrics()
