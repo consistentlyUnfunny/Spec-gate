@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# .env
+.env
+
 # markdown files that will polute git history
 .specgate
 
